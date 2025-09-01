@@ -1,5 +1,5 @@
 #include <bits/stdc++.h>
-#include "json.hpp"   // include the single-header JSON library
+#include "json.hpp"   // nlohmann/json single-header library
 
 using namespace std;
 using json = nlohmann::json;
@@ -23,6 +23,20 @@ vector<long long> build_polynomial(const vector<long long>& roots) {
     return coeff;
 }
 
+// Safe base conversion (string -> long long)
+long long parse_root(const string& value, int base) {
+    // try parsing into long long, throw if too large
+    try {
+        return stoll(value, nullptr, base);
+    } catch (const exception& e) {
+        cerr << "Error: root value '" << value
+             << "' in base " << base
+             << " is too large for 64-bit integer.\n";
+        cerr << "Consider using a BigInt library (e.g. Boost.Multiprecision).\n";
+        exit(1);
+    }
+}
+
 // Parse JSON, decode roots, and compute coefficients
 vector<long long> solve_from_json(const json& data) {
     int n = data["keys"]["n"];
@@ -33,11 +47,15 @@ vector<long long> solve_from_json(const json& data) {
         if (key == "keys") continue;
         int base = stoi(val["base"].get<string>());
         string value = val["value"];
-        long long root = stoll(value, nullptr, base);  // decode in base
+        long long root = parse_root(value, base);
         roots.push_back(root);
     }
 
-    // use first k roots only
+    // Use only the first k roots
+    if ((int)roots.size() < k) {
+        cerr << "Error: not enough roots provided. Need " << k << " but got " << roots.size() << ".\n";
+        exit(1);
+    }
     roots.resize(k);
 
     return build_polynomial(roots);
@@ -49,7 +67,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // read JSON file
+    // Read JSON file
     ifstream in(argv[1]);
     if (!in) {
         cerr << "Error: cannot open file " << argv[1] << "\n";
@@ -57,12 +75,17 @@ int main(int argc, char* argv[]) {
     }
 
     json data;
-    in >> data;
+    try {
+        in >> data;
+    } catch (const exception& e) {
+        cerr << "Error parsing JSON: " << e.what() << "\n";
+        return 1;
+    }
 
-    // solve
+    // Solve polynomial
     vector<long long> coeffs = solve_from_json(data);
 
-    // print result
+    // Print result (constant term first)
     cout << "[";
     for (size_t i = 0; i < coeffs.size(); i++) {
         cout << coeffs[i];
